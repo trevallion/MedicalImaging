@@ -1,38 +1,69 @@
 import numpy as np
 import pydicom
+import os
 from pydicom.data import get_testdata_files
 
-def get_data():
-    filenames = get_testdata_files('CT_small.dcm')
+def get_data(directory_name):
+    
+    filenames = os.listdir(directory_name) #get_testdata_files('CT_small.dcm')
     datasets = []
 
     for filename in filenames:
-        dataset = pydicom.dcmread(filename)
+        dataset = pydicom.dcmread(os.path.join(directory_name,filename))
         datasets.append(dataset)
-
+    
+    # If there is only one slice, add extra copies of it.
+    if(len(datasets) < 2):
+        for i in range(0,10):
+            datasets.append(dataset)
+    
     datasets.sort(key=lambda d: d.SliceLocation)
 
     slices = len(datasets)
     rows = int(datasets[0].Rows)
     columns = int(datasets[0].Columns)
-    pixelWidth = float(datasets[0].PixelSpacing[0])
-    pixelHeight = float(datasets[0].PixelSpacing[1])
-    sliceThickness = float(datasets[0].SliceThickness)
+    pixelWidth = float(datasets[0].PixelSpacing[0]) / 1000
+    pixelHeight = float(datasets[0].PixelSpacing[1]) / 1000
+    sliceThickness = float(datasets[0].SliceThickness) / 1000
     highBit = int(datasets[0].HighBit)
-    normalizingValue = pow(2,highBit)
+    normalizingValue = pow(2,highBit - 1)
     rescaleSlope = float(datasets[0].RescaleSlope)
     rescaleIntercept = float(datasets[0].RescaleIntercept)
+    windowCenter = (datasets[0].get('WindowCenter',normalizingValue / 2))[0]
+    windowWidth = (datasets[0].get('WindowWidth',normalizingValue))[0]
+    
+    print(windowCenter)
+    print(windowWidth)
+    
+    bottomOfWindow = windowCenter - windowWidth / 2
+    topOfWindow = windowCenter + windowWidth / 2
     
     print("Rescale Slope: " + str(rescaleSlope))
     print("Rescale Intercept : " + str(rescaleIntercept))
-
-    pixelData = np.zeros((slices, rows, columns),dtype=float)
+    print("Pixel Height: " + str(pixelHeight))
+    print("Pixel Width: " + str(pixelWidth))
+    print("Slice Thickness: " + str(sliceThickness))
+    print("Bottom of Window: " + str(bottomOfWindow))
+    print("Top of Window: " + str(topOfWindow))
+    print("Normalizing Value: " + str(normalizingValue))
+    
+    pixelData = np.zeros((columns, rows, slices),dtype=float)
 
     for index,dataset in enumerate(datasets):
-        pixelData[index,:,:] = (dataset.pixel_array[:,:] * rescaleSlope + rescaleIntercept) / normalizingValue
-        #pixelData[index,:,:] = dataset.pixel_array[:,:] / normalizingValue
-        #pixelData[index,:,:] = 100
+        #pixelData[:,:,index] = (dataset.pixel_array[:,:] * rescaleSlope + rescaleIntercept) / normalizingValue
+        #pixelData[:,:,index] = dataset.pixel_array[:,:] / normalizingValue
+        pixelData[:,:,index] = rescaleAndWindowPixelValue(dataset.pixel_array[:,:], bottomOfWindow, windowWidth, rescaleSlope, rescaleIntercept, normalizingValue) / normalizingValue
+        
     
-    xCoords,yCoords,zCoords = np.mgrid[0:(columns + 1)*pixelWidth:pixelWidth, 0:(rows + 1)*pixelHeight, 0:(slices + 1) * sliceThickness:sliceThickness]
+    xCoords,yCoords,zCoords = np.mgrid[0:(columns)*pixelWidth:pixelWidth, 
+                                       0:(rows)*pixelHeight:pixelHeight, 
+                                       0:(slices) * sliceThickness:sliceThickness]
     
     return xCoords, yCoords, zCoords, pixelData
+
+def rescaleAndWindowPixelValue(pixelValue, bottomOfWindow, windowWidth, rescaleSlope, rescaleIntercept, normalizingValue):
+    # apply rescale calculation
+    rescaledPixelValue = pixelValue * rescaleSlope + rescaleIntercept
+    
+    # apply windowing calculation
+    return rescaledPixelValue / normalizingValue * windowWidth + bottomOfWindow
