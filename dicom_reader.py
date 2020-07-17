@@ -22,9 +22,9 @@ def get_data(directory_name):
     slices = len(datasets)
     rows = int(datasets[0].Rows)
     columns = int(datasets[0].Columns)
-    pixelWidth = float(datasets[0].PixelSpacing[0]) / 1000
-    pixelHeight = float(datasets[0].PixelSpacing[1]) / 1000
-    sliceThickness = float(datasets[0].SliceThickness) / 1000
+    pixelWidth = float(datasets[0].PixelSpacing[0])
+    pixelHeight = float(datasets[0].PixelSpacing[1])
+    sliceThickness = float(datasets[0].SliceThickness)
     highBit = int(datasets[0].HighBit)
     normalizingValue = pow(2,highBit - 1)
     rescaleSlope = float(datasets[0].RescaleSlope)
@@ -47,19 +47,18 @@ def get_data(directory_name):
     print("Top of Window: " + str(topOfWindow))
     print("Normalizing Value: " + str(normalizingValue))
     
-    pixelData = np.zeros((columns, rows, slices),dtype=float)
+    pixelData = np.zeros((slices, rows, columns),dtype=float)
 
     for index,dataset in enumerate(datasets):
         #pixelData[:,:,index] = (dataset.pixel_array[:,:] * rescaleSlope + rescaleIntercept) / normalizingValue
         #pixelData[:,:,index] = dataset.pixel_array[:,:] / normalizingValue
-        pixelData[:,:,index] = rescaleAndWindowPixelValue(dataset.pixel_array[:,:], bottomOfWindow, windowWidth, rescaleSlope, rescaleIntercept, normalizingValue) / normalizingValue
+        pixelData[index,:,:] = rescaleAndWindowPixelValue(dataset.pixel_array[:,:], bottomOfWindow, windowWidth, rescaleSlope, rescaleIntercept, normalizingValue) / normalizingValue
         
+    maxXExtent = pixelWidth * columns
+    maxYExtent = pixelHeight * rows
+    maxZExtent = sliceThickness * slices
     
-    xCoords,yCoords,zCoords = np.mgrid[0:(columns)*pixelWidth:pixelWidth, 
-                                       0:(rows)*pixelHeight:pixelHeight, 
-                                       0:(slices) * sliceThickness:sliceThickness]
-    
-    return xCoords, yCoords, zCoords, pixelData
+    return maxXExtent, maxYExtent, maxZExtent, pixelData
 
 def rescaleAndWindowPixelValue(pixelValue, bottomOfWindow, windowWidth, rescaleSlope, rescaleIntercept, normalizingValue):
     # apply rescale calculation
